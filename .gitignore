@@ -17,3 +17,15 @@ fastlane/report.xml
 site/out/
 site/.claude/
 site/bun.lock
+
+# Local Go workspace overrides — use a local checkout of dependencies
+# without committing it. CI/release builds use the versions in go.mod.
+go.work
+go.work.sum
+
+# Browser automation captures from local dev sessions
+.playwright-cli/
+output/
+
+# Top-level bun lockfile from running e2e tests at the repo root
+/bun.lock
