@@ -123,19 +123,40 @@ hdiutil create -volname "$APP_NAME" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$
 echo "   DMG: $(du -h "$DMG_PATH" | cut -f1)"
 
 # ── Notarize ──
-NOTARY_PROFILE="${NOTARY_KEYCHAIN_PROFILE:-OpenMessage}"
+# Two modes:
+#   1. Local: AC_USERNAME / AC_PASSWORD / AC_TEAM_ID set explicitly (CI path)
+#   2. Local: NOTARY_KEYCHAIN_PROFILE points at a stored xcrun notarytool profile
+# If neither is set we skip notarization but still produce a signed DMG.
 if [ -n "$SIGN_IDENTITY" ]; then
-    echo "==> Submitting for notarization..."
-    xcrun notarytool submit "$DMG_PATH" \
-        --keychain-profile "$NOTARY_PROFILE" \
-        --wait
+    if [ -n "${AC_USERNAME:-}" ] && [ -n "${AC_PASSWORD:-}" ] && [ -n "${AC_TEAM_ID:-}" ]; then
+        echo "==> Submitting for notarization (Apple ID credentials)..."
+        xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$AC_USERNAME" \
+            --password "$AC_PASSWORD" \
+            --team-id "$AC_TEAM_ID" \
+            --wait
 
-    echo "==> Stapling notarization ticket..."
-    xcrun stapler staple "$DMG_PATH"
-    echo "   Notarized and stapled!"
+        echo "==> Stapling notarization ticket..."
+        xcrun stapler staple "$DMG_PATH"
+        echo "   Notarized and stapled!"
+    elif xcrun notarytool history --keychain-profile "${NOTARY_KEYCHAIN_PROFILE:-OpenMessage}" >/dev/null 2>&1; then
+        NOTARY_PROFILE="${NOTARY_KEYCHAIN_PROFILE:-OpenMessage}"
+        echo "==> Submitting for notarization (keychain profile: $NOTARY_PROFILE)..."
+        xcrun notarytool submit "$DMG_PATH" \
+            --keychain-profile "$NOTARY_PROFILE" \
+            --wait
+
+        echo "==> Stapling notarization ticket..."
+        xcrun stapler staple "$DMG_PATH"
+        echo "   Notarized and stapled!"
+    else
+        echo ""
+        echo "   Signed but NOT notarized (set AC_USERNAME / AC_PASSWORD / AC_TEAM_ID"
+        echo "   or store a keychain profile via 'xcrun notarytool store-credentials')."
+    fi
 else
     echo ""
-    echo "   To sign + notarize, set: DEVELOPER_ID"
+    echo "   To sign + notarize, set: DEVELOPER_ID (e.g. \"Developer ID Application: Max Ghenis (8VB5UKQZC6)\")"
 fi
 
 echo ""
