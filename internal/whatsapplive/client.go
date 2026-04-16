@@ -115,17 +115,16 @@ type Callbacks struct {
 }
 
 type StatusSnapshot struct {
-	Connected   bool                 `json:"connected"`
-	Connecting  bool                 `json:"connecting"`
-	Paired      bool                 `json:"paired"`
-	Pairing     bool                 `json:"pairing"`
-	AccountJID  string               `json:"account_jid,omitempty"`
-	PushName    string               `json:"push_name,omitempty"`
-	LastError   string               `json:"last_error,omitempty"`
-	QRAvailable bool                 `json:"qr_available"`
-	QREvent     string               `json:"qr_event,omitempty"`
-	QRUpdatedAt int64                `json:"qr_updated_at,omitempty"`
-	CallSidecar *CallSidecarSnapshot `json:"call_sidecar,omitempty"`
+	Connected   bool   `json:"connected"`
+	Connecting  bool   `json:"connecting"`
+	Paired      bool   `json:"paired"`
+	Pairing     bool   `json:"pairing"`
+	AccountJID  string `json:"account_jid,omitempty"`
+	PushName    string `json:"push_name,omitempty"`
+	LastError   string `json:"last_error,omitempty"`
+	QRAvailable bool   `json:"qr_available"`
+	QREvent     string `json:"qr_event,omitempty"`
+	QRUpdatedAt int64  `json:"qr_updated_at,omitempty"`
 }
 
 type QRSnapshot struct {
@@ -181,7 +180,6 @@ type Bridge struct {
 	avatars                   map[string]avatarCacheEntry
 	unavailableRepairRequests map[string]time.Time
 	recentlyLeftGroups        map[string]time.Time
-	callSidecar               *callSidecarManager
 }
 
 func New(sessionPath string, store *db.Store, logger zerolog.Logger, callbacks Callbacks) (*Bridge, error) {
@@ -191,7 +189,6 @@ func New(sessionPath string, store *db.Store, logger zerolog.Logger, callbacks C
 		sessionPath:        sessionPath,
 		callbacks:          callbacks,
 		recentlyLeftGroups: make(map[string]time.Time),
-		callSidecar:        newCallSidecarManager(logger),
 	}
 	if err := bridge.initClientLocked(); err != nil {
 		return nil, err
@@ -218,9 +215,6 @@ func (b *Bridge) initClientLocked() error {
 	cli.AddEventHandler(b.handleEvent)
 	b.container = container
 	b.client = cli
-	if b.callSidecar != nil {
-		b.callSidecar.attach(cli)
-	}
 	return nil
 }
 
@@ -234,9 +228,6 @@ func sessionStoreDSN(path string) string {
 
 func (b *Bridge) resetClientLocked() error {
 	if b.client != nil {
-		if b.callSidecar != nil {
-			b.callSidecar.stop()
-		}
 		b.client.Disconnect()
 		b.client = nil
 	}
@@ -437,9 +428,6 @@ func (b *Bridge) Status() StatusSnapshot {
 	status.QRAvailable = b.qr.Code != ""
 	status.QREvent = b.qr.Event
 	status.QRUpdatedAt = b.qr.UpdatedAt
-	if b.callSidecar != nil {
-		status.CallSidecar = b.callSidecar.snapshot()
-	}
 	return status
 }
 
@@ -563,9 +551,6 @@ func (b *Bridge) UsesLiveSession() bool {
 func (b *Bridge) Close() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.callSidecar != nil {
-		b.callSidecar.stop()
-	}
 	if b.client != nil {
 		b.client.Disconnect()
 		b.client = nil
