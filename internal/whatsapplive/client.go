@@ -1140,6 +1140,15 @@ func (b *Bridge) handleMessage(evt *waevents.Message) {
 	if body == "" {
 		return
 	}
+	if body == "[Unsupported message]" {
+		// Log what we saw so we can add a proper extractor next time. No
+		// message content is logged, just the top-level proto field names.
+		b.logger.Info().
+			Str("msg_id", string(evt.Info.ID)).
+			Str("chat", evt.Info.Chat.String()).
+			Str("content_types", describeWhatsAppMessageContent(evt.Message)).
+			Msg("WhatsApp message fell through to [Unsupported message]")
+	}
 
 	conv, err := b.upsertConversationForMessage(evt)
 	if err != nil {
@@ -2274,17 +2283,139 @@ func extractMessageBody(msg *waE2E.Message) string {
 		return "[Audio]"
 	case msg.GetDocumentMessage() != nil:
 		return firstNonEmpty(strings.TrimSpace(msg.GetDocumentMessage().GetCaption()), "[Document]")
-	case msg.GetAudioMessage() != nil:
-		return "[Audio]"
 	case msg.GetStickerMessage() != nil:
 		return "[Sticker]"
 	case msg.GetContactMessage() != nil || msg.GetContactsArrayMessage() != nil:
 		return "[Contact]"
+	case locationMessagePlaceholder(msg) != "":
+		return locationMessagePlaceholder(msg)
+	case msg.GetLiveLocationMessage() != nil:
+		return "[Live location]"
+	case pollMessagePlaceholder(msg) != "":
+		return pollMessagePlaceholder(msg)
+	case msg.GetPollUpdateMessage() != nil:
+		return "[Poll vote]"
+	case msg.GetEventMessage() != nil:
+		if name := strings.TrimSpace(msg.GetEventMessage().GetName()); name != "" {
+			if msg.GetEventMessage().GetIsCanceled() {
+				return "[Event canceled: " + name + "]"
+			}
+			return "[Event: " + name + "]"
+		}
+		return "[Event]"
+	case msg.GetEventInviteMessage() != nil:
+		return "[Event invite]"
+	case msg.GetGroupInviteMessage() != nil:
+		if name := strings.TrimSpace(msg.GetGroupInviteMessage().GetGroupName()); name != "" {
+			return "[Group invite: " + name + "]"
+		}
+		return "[Group invite]"
+	case msg.GetPinInChatMessage() != nil:
+		// Type 1 = pin, 2 = unpin (per whatsmeow's enum; other values treated as pin)
+		if msg.GetPinInChatMessage().GetType() == 2 {
+			return "[Unpinned message]"
+		}
+		return "[Pinned message]"
+	case msg.GetCallLogMesssage() != nil:
+		call := msg.GetCallLogMesssage()
+		if call.GetIsVideo() {
+			return "[Video call]"
+		}
+		return "[Voice call]"
+	case msg.GetCommentMessage() != nil:
+		if text := strings.TrimSpace(msg.GetCommentMessage().GetMessage().GetExtendedTextMessage().GetText()); text != "" {
+			return text
+		}
+		return "[Comment]"
 	case hasUnsupportedWhatsAppContent(msg):
 		return "[Unsupported message]"
 	default:
 		return ""
 	}
+}
+
+// locationMessagePlaceholder returns a human-readable body for a LocationMessage,
+// or "" if the message isn't a location. Prefers the name, then the address,
+// then a generic [Location] placeholder. Coordinates are omitted since they're
+// not useful as a thread body.
+func locationMessagePlaceholder(msg *waE2E.Message) string {
+	loc := msg.GetLocationMessage()
+	if loc == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(loc.GetName()); name != "" {
+		return "[Location: " + name + "]"
+	}
+	if addr := strings.TrimSpace(loc.GetAddress()); addr != "" {
+		return "[Location: " + addr + "]"
+	}
+	return "[Location]"
+}
+
+// pollMessagePlaceholder returns a human-readable body for any of the poll
+// variants (V1-V6), or "" if the message isn't a poll. The poll "name" is the
+// question text.
+func pollMessagePlaceholder(msg *waE2E.Message) string {
+	candidates := []*waE2E.PollCreationMessage{
+		msg.GetPollCreationMessage(),
+		msg.GetPollCreationMessageV2(),
+		msg.GetPollCreationMessageV3(),
+		msg.GetPollCreationMessageV5(),
+		msg.GetPollCreationMessageV6(),
+	}
+	for _, poll := range candidates {
+		if poll == nil {
+			continue
+		}
+		if q := strings.TrimSpace(poll.GetName()); q != "" {
+			return "[Poll: " + q + "]"
+		}
+		return "[Poll]"
+	}
+	return ""
+}
+
+// describeWhatsAppMessageContent returns a comma-separated list of non-nil
+// top-level fields on the message, so we can tell in the log what kind of
+// message fell through to [Unsupported message]. No protobuf bodies are
+// logged, only type names — safe to log at info level.
+func describeWhatsAppMessageContent(msg *waE2E.Message) string {
+	msg = unwrapWhatsAppMessage(msg)
+	if msg == nil {
+		return ""
+	}
+	var present []string
+	check := func(name string, nonNil bool) {
+		if nonNil {
+			present = append(present, name)
+		}
+	}
+	// Media-ish types we already handle are intentionally excluded — those
+	// never reach the unsupported fallback.
+	check("Buttons", msg.GetButtonsMessage() != nil)
+	check("ButtonsResponse", msg.GetButtonsResponseMessage() != nil)
+	check("List", msg.GetListMessage() != nil)
+	check("ListResponse", msg.GetListResponseMessage() != nil)
+	check("Template", msg.GetTemplateMessage() != nil)
+	check("TemplateButtonReply", msg.GetTemplateButtonReplyMessage() != nil)
+	check("Order", msg.GetOrderMessage() != nil)
+	check("Product", msg.GetProductMessage() != nil)
+	check("Invoice", msg.GetInvoiceMessage() != nil)
+	check("Interactive", msg.GetInteractiveMessage() != nil)
+	check("InteractiveResponse", msg.GetInteractiveResponseMessage() != nil)
+	check("Protocol", msg.GetProtocolMessage() != nil)
+	check("SendPayment", msg.GetSendPaymentMessage() != nil)
+	check("RequestPayment", msg.GetRequestPaymentMessage() != nil)
+	check("NewsletterAdminInvite", msg.GetNewsletterAdminInviteMessage() != nil)
+	check("EncEventResponse", msg.GetEncEventResponseMessage() != nil)
+	check("PollResultSnapshot", msg.GetPollResultSnapshotMessage() != nil)
+	check("PollAddOption", msg.GetPollAddOptionMessage() != nil)
+	check("ReactionMessage", msg.GetReactionMessage() != nil)
+	check("StickerPack", msg.GetStickerPackMessage() != nil)
+	if len(present) == 0 {
+		return "unknown"
+	}
+	return strings.Join(present, ",")
 }
 
 func hasUnsupportedWhatsAppContent(msg *waE2E.Message) bool {

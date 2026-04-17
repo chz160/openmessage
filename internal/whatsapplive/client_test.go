@@ -69,12 +69,162 @@ func TestExtractMessageBody(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported subtype placeholder", func(t *testing.T) {
+	t.Run("location with name", func(t *testing.T) {
 		msg := &waE2E.Message{
-			LocationMessage: &waE2E.LocationMessage{},
+			LocationMessage: &waE2E.LocationMessage{Name: strPtr("Blue Bottle Coffee")},
 		}
+		if got := extractMessageBody(msg); got != "[Location: Blue Bottle Coffee]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("location without name falls back to address", func(t *testing.T) {
+		msg := &waE2E.Message{
+			LocationMessage: &waE2E.LocationMessage{Address: strPtr("123 Market St")},
+		}
+		if got := extractMessageBody(msg); got != "[Location: 123 Market St]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("bare location", func(t *testing.T) {
+		msg := &waE2E.Message{LocationMessage: &waE2E.LocationMessage{}}
+		if got := extractMessageBody(msg); got != "[Location]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("live location", func(t *testing.T) {
+		msg := &waE2E.Message{LiveLocationMessage: &waE2E.LiveLocationMessage{}}
+		if got := extractMessageBody(msg); got != "[Live location]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("poll creation v3 with question", func(t *testing.T) {
+		msg := &waE2E.Message{
+			PollCreationMessageV3: &waE2E.PollCreationMessage{Name: strPtr("Dinner Friday?")},
+		}
+		if got := extractMessageBody(msg); got != "[Poll: Dinner Friday?]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("poll creation v2 with question", func(t *testing.T) {
+		msg := &waE2E.Message{
+			PollCreationMessageV2: &waE2E.PollCreationMessage{Name: strPtr("Which park?")},
+		}
+		if got := extractMessageBody(msg); got != "[Poll: Which park?]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("poll update", func(t *testing.T) {
+		msg := &waE2E.Message{PollUpdateMessage: &waE2E.PollUpdateMessage{}}
+		if got := extractMessageBody(msg); got != "[Poll vote]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("event", func(t *testing.T) {
+		msg := &waE2E.Message{
+			EventMessage: &waE2E.EventMessage{Name: strPtr("Hike at Lands End")},
+		}
+		if got := extractMessageBody(msg); got != "[Event: Hike at Lands End]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("event canceled", func(t *testing.T) {
+		b := true
+		msg := &waE2E.Message{
+			EventMessage: &waE2E.EventMessage{Name: strPtr("Dinner"), IsCanceled: &b},
+		}
+		if got := extractMessageBody(msg); got != "[Event canceled: Dinner]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("group invite", func(t *testing.T) {
+		msg := &waE2E.Message{
+			GroupInviteMessage: &waE2E.GroupInviteMessage{GroupName: strPtr("Hikers")},
+		}
+		if got := extractMessageBody(msg); got != "[Group invite: Hikers]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("pin in chat (pin)", func(t *testing.T) {
+		pinType := waE2E.PinInChatMessage_Type(1)
+		msg := &waE2E.Message{
+			PinInChatMessage: &waE2E.PinInChatMessage{Type: &pinType},
+		}
+		if got := extractMessageBody(msg); got != "[Pinned message]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("pin in chat (unpin)", func(t *testing.T) {
+		unpinType := waE2E.PinInChatMessage_Type(2)
+		msg := &waE2E.Message{
+			PinInChatMessage: &waE2E.PinInChatMessage{Type: &unpinType},
+		}
+		if got := extractMessageBody(msg); got != "[Unpinned message]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("call log (voice)", func(t *testing.T) {
+		msg := &waE2E.Message{CallLogMesssage: &waE2E.CallLogMessage{}}
+		if got := extractMessageBody(msg); got != "[Voice call]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("call log (video)", func(t *testing.T) {
+		video := true
+		msg := &waE2E.Message{
+			CallLogMesssage: &waE2E.CallLogMessage{IsVideo: &video},
+		}
+		if got := extractMessageBody(msg); got != "[Video call]" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("truly unsupported type falls through", func(t *testing.T) {
+		// ProtocolMessage isn't something we want to surface as a thread
+		// body, but it has non-zero proto size, so it should hit the
+		// unsupported fallback and trigger the diagnostic log.
+		msg := &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{}}
 		if got := extractMessageBody(msg); got != "[Unsupported message]" {
 			t.Fatalf("got %q, want [Unsupported message]", got)
+		}
+	})
+}
+
+func TestDescribeWhatsAppMessageContent(t *testing.T) {
+	t.Run("nil message", func(t *testing.T) {
+		if got := describeWhatsAppMessageContent(nil); got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("protocol message is surfaced", func(t *testing.T) {
+		msg := &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{}}
+		got := describeWhatsAppMessageContent(msg)
+		if !strings.Contains(got, "Protocol") {
+			t.Fatalf("got %q, want it to mention Protocol", got)
+		}
+	})
+
+	t.Run("multiple types are joined", func(t *testing.T) {
+		msg := &waE2E.Message{
+			ProtocolMessage: &waE2E.ProtocolMessage{},
+			ButtonsMessage:  &waE2E.ButtonsMessage{},
+		}
+		got := describeWhatsAppMessageContent(msg)
+		if !strings.Contains(got, "Buttons") || !strings.Contains(got, "Protocol") {
+			t.Fatalf("got %q, expected both Buttons and Protocol", got)
 		}
 	})
 }

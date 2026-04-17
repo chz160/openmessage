@@ -1451,8 +1451,15 @@ func TestBridgeSendMediaRunsSignalCLIAndReturnsLocalAttachmentMessage(t *testing
 		t.Fatalf("SendMedia(): %v", err)
 	}
 	got := strings.Join(captured[1:], " ")
-	if !strings.Contains(got, "-a +15551230000 send -m signal photo -a ") || !strings.Contains(got, " +15551234567") {
+	// The attachment flag must use `--attachment=path` (not `-a path`) so
+	// signal-cli's greedy nargs='*' parsing doesn't consume the recipient
+	// as a second attachment. See SendMedia for the full rationale.
+	if !strings.Contains(got, "-a +15551230000 send -m signal photo --attachment=") ||
+		!strings.Contains(got, " +15551234567") {
 		t.Fatalf("unexpected signal-cli args: %q", got)
+	}
+	if strings.Contains(got, " -a "+string(os.PathSeparator)) || strings.Contains(got, "send -m signal photo -a /") {
+		t.Fatalf("attachment passed as bare `-a path` — regression of the `No recipients given` bug: %q", got)
 	}
 	if msg.SourcePlatform != "signal" {
 		t.Fatalf("source platform = %q, want signal", msg.SourcePlatform)
@@ -1475,6 +1482,49 @@ func TestBridgeSendMediaRunsSignalCLIAndReturnsLocalAttachmentMessage(t *testing
 	}
 	if mimeType != "image/png" {
 		t.Fatalf("mimeType = %q, want image/png", mimeType)
+	}
+}
+
+// Regression: SendMedia to an ACI-only recipient (no phone number) previously
+// failed with "No recipients given" because `-a path` let argparse's nargs='*'
+// consume the following positional recipient as another attachment. The fix is
+// to pass `--attachment=path` so the value is anchored to the flag.
+func TestBridgeSendMediaToACIRecipientKeepsRecipientArg(t *testing.T) {
+	bridge := &Bridge{
+		account:   "+15551230000",
+		connected: true,
+		configDir: t.TempDir(),
+		logger:    zerolog.Nop(),
+		callbacks: Callbacks{},
+	}
+
+	originalRun := runSignalCLI
+	defer func() { runSignalCLI = originalRun }()
+
+	var captured []string
+	runSignalCLI = func(ctx context.Context, configDir string, args ...string) ([]byte, error) {
+		captured = append([]string{}, args...)
+		return []byte("ok"), nil
+	}
+
+	const aci = "a1a98e48-7fa6-402e-9f62-b687098fed68"
+	if _, err := bridge.SendMedia("signal:"+aci, []byte("png-bytes"), "photo.png", "image/png", "hello", ""); err != nil {
+		t.Fatalf("SendMedia(): %v", err)
+	}
+
+	// The ACI must appear as a standalone positional after all the flags.
+	// Previously this token was being consumed by the preceding `-a` flag's
+	// greedy attachment list.
+	if len(captured) == 0 || captured[len(captured)-1] != aci {
+		t.Fatalf("recipient ACI was not the final positional arg: %v", captured)
+	}
+
+	// No token may be a bare "-a" directly followed by a filesystem path —
+	// that's the exact shape that triggers the bug.
+	for i := 0; i < len(captured)-1; i++ {
+		if captured[i] == "-a" && strings.HasPrefix(captured[i+1], string(os.PathSeparator)) {
+			t.Fatalf("attachment still passed as bare `-a path` at index %d: %v", i, captured)
+		}
 	}
 }
 

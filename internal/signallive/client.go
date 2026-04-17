@@ -539,7 +539,13 @@ func (b *Bridge) SendMedia(conversationID string, data []byte, filename, mime, c
 	if caption != "" {
 		args = append(args, "-m", caption)
 	}
-	args = append(args, "-a", attachmentPath)
+	// Use `--attachment=path` (not `-a path`). signal-cli's send subcommand
+	// defines -a/--attachment with nargs='*', which makes argparse greedily
+	// consume every following token as another attachment — including the
+	// positional recipient. Anchoring the value with `=` prevents that and
+	// keeps the recipient available for parsing as the positional.
+	// Reproduced with "No recipients given" when sending to an ACI-only contact.
+	args = append(args, "--attachment="+attachmentPath)
 	quoteArgs, err := b.signalQuoteArgs(replyToID, account)
 	if err != nil {
 		_ = os.Remove(attachmentPath)
