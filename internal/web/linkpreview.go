@@ -88,7 +88,7 @@ func (s *LinkPreviewService) Fetch(ctx context.Context, rawURL string) (*LinkPre
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidLinkPreviewURL, err)
 	}
-	req.Header.Set("User-Agent", "OpenMessage/1.0 (+https://openmessage.app)")
+	req.Header.Set("User-Agent", "OpenMessage/1.0 (+https://openmessage.ai)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 
 	resp, err := s.client.Do(req)

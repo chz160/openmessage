@@ -415,6 +415,40 @@ test('sends a Signal image attachment through the compose box', async ({ page })
   await expect(page.locator('#messages-area img[src*="/api/media/"]').last()).toBeVisible();
 });
 
+test('sends a captioned Signal image as one message, not two', async ({ page }) => {
+  const caption = `Signal captioned ${Date.now()}`;
+  const sendMediaRequests = [];
+  const sendTextRequests = [];
+  page.on('request', (req) => {
+    const url = req.url();
+    if (req.method() === 'POST' && url.includes('/api/send-media')) {
+      sendMediaRequests.push(req);
+    } else if (req.method() === 'POST' && /\/api\/send(\?|$)/.test(url)) {
+      sendTextRequests.push(req);
+    }
+  });
+
+  await openConversation(page, 'Taylor Price');
+  await expect(page.locator('#chat-header-source')).toContainText('Signal');
+  await page.locator('#file-input').setInputFiles({
+    name: 'signal-captioned.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z9wAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  });
+  await page.locator('#compose-input').fill(caption);
+  await page.locator('#send-btn').click();
+
+  await expect(page.locator('#attach-preview')).not.toHaveClass(/active/);
+  await expect(page.locator('#messages-area')).toContainText(caption);
+  expect(sendMediaRequests).toHaveLength(1);
+  expect(sendTextRequests).toHaveLength(0);
+  const body = sendMediaRequests[0].postData() || '';
+  expect(body).toContain(caption);
+});
+
 test('keeps the active thread pinned to the bottom after sending', async ({ page }) => {
   const outbound = `Bottom send ${Date.now()}`;
 

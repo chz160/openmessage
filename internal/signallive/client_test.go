@@ -1,6 +1,7 @@
 package signallive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -1752,6 +1753,77 @@ func TestHandleReceiveOutputDedupesMatchingLocalOutgoingSignalMessage(t *testing
 	}
 	if msgs[0].MessageID != local.MessageID {
 		t.Fatalf("message id = %q, want %q", msgs[0].MessageID, local.MessageID)
+	}
+}
+
+func TestMatchLocalOutgoingMessageWarnsOnDedupMiss(t *testing.T) {
+	cases := []struct {
+		name        string
+		localBody   string
+		localOffset time.Duration // offset from incoming timestamp
+		wantHit     bool
+		wantWarn    bool
+	}{
+		{"exact match within window", "hello signal", 500 * time.Millisecond, true, false},
+		{"body mismatch", "hello signal extra", 500 * time.Millisecond, false, true},
+		{"timestamp drift beyond 15s", "hello signal", 20 * time.Second, false, true},
+		{"no local candidate at all", "", 0, false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			store, err := db.New(filepath.Join(dataDir, "messages.db"))
+			if err != nil {
+				t.Fatalf("db.New(): %v", err)
+			}
+			defer store.Close()
+
+			conversationID := "signal:+15551234567"
+			incomingTS := int64(1700000000000)
+			if err := store.UpsertConversation(&db.Conversation{
+				ConversationID: conversationID,
+				Name:           "Taylor",
+				LastMessageTS:  incomingTS - 1000,
+				SourcePlatform: "signal",
+			}); err != nil {
+				t.Fatalf("UpsertConversation(): %v", err)
+			}
+
+			if tc.localBody != "" {
+				localTS := incomingTS - tc.localOffset.Milliseconds()
+				local := &db.Message{
+					MessageID:      localOutgoingMessageID(conversationID, localTS, tc.localBody),
+					ConversationID: conversationID,
+					SenderName:     "Me",
+					SenderNumber:   "+15551230000",
+					Body:           tc.localBody,
+					TimestampMS:    localTS,
+					Status:         "sent",
+					IsFromMe:       true,
+					SourcePlatform: "signal",
+				}
+				if err := store.UpsertMessage(local); err != nil {
+					t.Fatalf("UpsertMessage(): %v", err)
+				}
+			}
+
+			var buf bytes.Buffer
+			bridge := &Bridge{store: store, logger: zerolog.New(&buf)}
+			hit := bridge.matchLocalOutgoingMessage(conversationID, "hello signal", incomingTS)
+			if tc.wantHit && hit == nil {
+				t.Fatalf("expected match, got nil")
+			}
+			if !tc.wantHit && hit != nil {
+				t.Fatalf("expected no match, got %+v", hit)
+			}
+
+			logged := buf.String()
+			gotWarn := strings.Contains(logged, "Signal outgoing dedup missed")
+			if gotWarn != tc.wantWarn {
+				t.Fatalf("warn logged=%v want=%v (log=%q)", gotWarn, tc.wantWarn, logged)
+			}
+		})
 	}
 }
 

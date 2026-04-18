@@ -2350,22 +2350,48 @@ func (b *Bridge) matchLocalOutgoingMessage(conversationID, body string, timestam
 	if err != nil {
 		return nil
 	}
+	var nearestDriftMS int64 = -1
+	bodyMismatchSample := ""
 	for _, msg := range msgs {
 		if msg == nil || !msg.IsFromMe || msg.SourcePlatform != "signal" {
-			continue
-		}
-		if strings.TrimSpace(msg.Body) != body {
 			continue
 		}
 		if !strings.HasPrefix(msg.MessageID, "signal:local:") {
 			continue
 		}
-		if absInt64(msg.TimestampMS-timestamp) > int64(15*time.Second/time.Millisecond) {
+		trimmed := strings.TrimSpace(msg.Body)
+		drift := absInt64(msg.TimestampMS - timestamp)
+		if trimmed != body {
+			if bodyMismatchSample == "" && drift <= int64(30*time.Second/time.Millisecond) {
+				bodyMismatchSample = trimmed
+			}
+			continue
+		}
+		if drift > int64(15*time.Second/time.Millisecond) {
+			if nearestDriftMS < 0 || drift < nearestDriftMS {
+				nearestDriftMS = drift
+			}
 			continue
 		}
 		return msg
 	}
+	if nearestDriftMS > 0 || bodyMismatchSample != "" {
+		b.logger.Warn().
+			Str("conversation", conversationID).
+			Int64("incoming_ts_ms", timestamp).
+			Int64("nearest_drift_ms", nearestDriftMS).
+			Str("body_preview", truncateForLog(body, 80)).
+			Str("local_body_preview", truncateForLog(bodyMismatchSample, 80)).
+			Msg("Signal outgoing dedup missed — may produce duplicate media/text row")
+	}
 	return nil
+}
+
+func truncateForLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func signalQuoteReplyID(conversationID string, quote *signalQuotedMessage) string {

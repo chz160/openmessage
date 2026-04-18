@@ -7248,6 +7248,8 @@ body::after {
     const sendsCaptionedWhatsAppMedia = hasMedia
       && activePlatform === 'whatsapp'
       && !(pendingFile.file?.type || '').startsWith('audio/');
+    const sendsCaptionedMedia = sendsCaptionedWhatsAppMedia
+      || (hasMedia && activePlatform === 'signal');
     if ((!text && !hasMedia) || !activeConvoId) return;
 
     clearThreadFeedback();
@@ -7283,7 +7285,7 @@ body::after {
         if (!resp.ok) throw new Error(await resp.text());
         clearAttachment();
       }
-      if (text && !sendsCaptionedWhatsAppMedia) {
+      if (text && !sendsCaptionedMedia) {
         const payload = {
           conversation_id: activeConvoId,
           message: text,

@@ -273,7 +273,7 @@ func RunServe(logger zerolog.Logger, args ...string) error {
 	// Create MCP server
 	mcpSrv := mcpserver.NewMCPServer(
 		"openmessage",
-		"0.1.0",
+		buildVersion,
 		mcpserver.WithToolCapabilities(true),
 	)
 	tools.Register(mcpSrv, a)
