@@ -665,24 +665,43 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			return
 		}
 		success := resp.GetStatus() == gmproto.SendMessageResponse_SUCCESS
-		if success {
-			// Store sent message in DB immediately so UI shows it
+		if !success {
+			// Google Messages returned a non-SUCCESS status (UNKNOWN,
+			// FAILURE_2/3/4 — typically "not default SMS app" or RCS/SMS
+			// delivery failure). Persist a FAILED placeholder row so the
+			// user can see the attempt, and surface a clear HTTP error
+			// to the UI instead of silently swallowing the failure.
 			now := time.Now().UnixMilli()
-			if err := recordOutgoingMessage(&db.Message{
+			_ = recordOutgoingMessage(&db.Message{
 				MessageID:      payload.TmpID,
 				ConversationID: req.ConversationID,
 				Body:           req.Message,
 				IsFromMe:       true,
 				TimestampMS:    now,
-				Status:         "OUTGOING_SENDING",
+				Status:         "OUTGOING_FAILED:" + resp.GetStatus().String(),
 				ReplyToID:      req.ReplyToID,
-			}, ""); err != nil {
-				httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
-				return
-			}
+			}, "")
 			publishMessages(req.ConversationID)
 			publishConversations()
+			httpError(w, "send failed with status "+resp.GetStatus().String()+" (Google Messages rejected the send — check that OpenMessage is still paired and that Messages is your default SMS app)", 502)
+			return
 		}
+		// Store sent message in DB immediately so UI shows it
+		now := time.Now().UnixMilli()
+		if err := recordOutgoingMessage(&db.Message{
+			MessageID:      payload.TmpID,
+			ConversationID: req.ConversationID,
+			Body:           req.Message,
+			IsFromMe:       true,
+			TimestampMS:    now,
+			Status:         "OUTGOING_SENDING",
+			ReplyToID:      req.ReplyToID,
+		}, ""); err != nil {
+			httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
+			return
+		}
+		publishMessages(req.ConversationID)
+		publishConversations()
 		writeJSON(w, map[string]any{
 			"status":  resp.GetStatus().String(),
 			"success": success,
@@ -806,25 +825,41 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			return
 		}
 		success := resp.GetStatus() == gmproto.SendMessageResponse_SUCCESS
-		if success {
+		if !success {
 			now := time.Now().UnixMilli()
-			if err := recordOutgoingMessage(&db.Message{
+			_ = recordOutgoingMessage(&db.Message{
 				MessageID:      payload.TmpID,
 				ConversationID: convID,
 				Body:           "",
 				IsFromMe:       true,
 				TimestampMS:    now,
-				Status:         "OUTGOING_SENDING",
+				Status:         "OUTGOING_FAILED:" + resp.GetStatus().String(),
 				MediaID:        media.MediaID,
 				MimeType:       media.MimeType,
 				DecryptionKey:  hex.EncodeToString(media.DecryptionKey),
-			}, ""); err != nil {
-				httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
-				return
-			}
+			}, "")
 			publishMessages(convID)
 			publishConversations()
+			httpError(w, "send failed with status "+resp.GetStatus().String()+" (Google Messages rejected the media send — check pairing and that Messages is your default SMS app)", 502)
+			return
 		}
+		now := time.Now().UnixMilli()
+		if err := recordOutgoingMessage(&db.Message{
+			MessageID:      payload.TmpID,
+			ConversationID: convID,
+			Body:           "",
+			IsFromMe:       true,
+			TimestampMS:    now,
+			Status:         "OUTGOING_SENDING",
+			MediaID:        media.MediaID,
+			MimeType:       media.MimeType,
+			DecryptionKey:  hex.EncodeToString(media.DecryptionKey),
+		}, ""); err != nil {
+			httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
+			return
+		}
+		publishMessages(convID)
+		publishConversations()
 		writeJSON(w, map[string]any{
 			"status":  resp.GetStatus().String(),
 			"success": success,
@@ -1180,23 +1215,36 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			return
 		}
 		success := resp.GetStatus() == gmproto.SendMessageResponse_SUCCESS
-		if success {
+		if !success {
 			now := time.Now().UnixMilli()
-			if err := recordOutgoingMessage(&db.Message{
+			_ = recordOutgoingMessage(&db.Message{
 				MessageID:      payload.TmpID,
 				ConversationID: draft.ConversationID,
 				Body:           req.Body,
 				IsFromMe:       true,
 				TimestampMS:    now,
-				Status:         "OUTGOING_SENDING",
-			}, req.DraftID); err != nil {
-				httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
-				return
-			}
+				Status:         "OUTGOING_FAILED:" + resp.GetStatus().String(),
+			}, "")
 			publishMessages(draft.ConversationID)
-			publishDrafts(draft.ConversationID)
 			publishConversations()
+			httpError(w, "send failed with status "+resp.GetStatus().String()+" (Google Messages rejected the draft send — check pairing and that Messages is your default SMS app)", 502)
+			return
 		}
+		now := time.Now().UnixMilli()
+		if err := recordOutgoingMessage(&db.Message{
+			MessageID:      payload.TmpID,
+			ConversationID: draft.ConversationID,
+			Body:           req.Body,
+			IsFromMe:       true,
+			TimestampMS:    now,
+			Status:         "OUTGOING_SENDING",
+		}, req.DraftID); err != nil {
+			httpError(w, "message sent remotely but failed to update local store: "+err.Error(), 500)
+			return
+		}
+		publishMessages(draft.ConversationID)
+		publishDrafts(draft.ConversationID)
+		publishConversations()
 		writeJSON(w, map[string]any{
 			"status":  resp.GetStatus().String(),
 			"success": success,
