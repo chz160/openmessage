@@ -4041,6 +4041,9 @@ body::after {
             </div>
           </div>
         <div class="sidebar-actions">
+          <button class="new-msg-btn" id="platforms-btn" type="button" title="Platforms" aria-label="Platforms">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2"/></svg>
+          </button>
           <button class="new-msg-btn notif-btn" id="notif-btn" type="button" title="Enable desktop notifications" aria-label="Enable desktop notifications" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
           </button>
@@ -4361,6 +4364,7 @@ body::after {
   const $replyToName = document.getElementById('reply-to-name');
   const $replyToText = document.getElementById('reply-to-text');
   const $replyClose = document.getElementById('reply-close');
+  const $platformsBtn = document.getElementById('platforms-btn');
   const $notifBtn = document.getElementById('notif-btn');
   const $waOverlay = document.getElementById('wa-overlay');
   const $waClose = document.getElementById('wa-close');
@@ -8789,6 +8793,9 @@ body::after {
   if ($copyDiagnosticsBtn) $copyDiagnosticsBtn.addEventListener('click', () => { copyDiagnostics().catch(err => showThreadFeedback(err.message || 'Failed to copy diagnostics')); });
   if ($downloadDiagnosticsBtn) $downloadDiagnosticsBtn.addEventListener('click', () => { downloadDiagnostics().catch(err => showThreadFeedback(err.message || 'Failed to export diagnostics')); });
   if ($reportIssueBtn) $reportIssueBtn.addEventListener('click', () => { reportIssue().catch(err => showThreadFeedback(err.message || 'Failed to prepare issue report')); });
+  if ($platformsBtn) $platformsBtn.addEventListener('click', () => {
+    openWhatsAppOverlay().catch(err => showThreadFeedback(err.message || 'Failed to load platforms'));
+  });
   if ($notifBtn) $notifBtn.addEventListener('click', () => { toggleNotifications().catch(err => console.error('Failed to toggle notifications:', err)); });
   if ($connectionBannerAction) $connectionBannerAction.addEventListener('click', () => {
     handleLaunchAction($connectionBannerAction.dataset.action).catch(err => showThreadFeedback(err.message || 'Action failed'));
