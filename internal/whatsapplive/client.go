@@ -228,7 +228,7 @@ func sessionStoreReadOnlyDSN(path string) string {
 
 func sessionStoreDSNWithQuery(path string, rawQuery string) string {
 	normalizedPath := strings.ReplaceAll(path, "\\", "/")
-	if hasNormalizedWindowsDrivePrefix(normalizedPath) {
+	if isWindowsAbsolutePath(normalizedPath) {
 		normalizedPath = "/" + normalizedPath
 	}
 	return (&url.URL{
@@ -238,7 +238,7 @@ func sessionStoreDSNWithQuery(path string, rawQuery string) string {
 	}).String()
 }
 
-func hasNormalizedWindowsDrivePrefix(path string) bool {
+func isWindowsAbsolutePath(path string) bool {
 	if len(path) < 3 {
 		return false
 	}
