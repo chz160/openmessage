@@ -307,11 +307,11 @@ func (w *WhatsAppNative) loadChats(waDB *sql.DB) ([]waChat, error) {
 			if c.name == "" || rawGroupJIDRe.MatchString(c.name) {
 				if derived := deriveGroupName(c.participants); derived != "" {
 					c.name = derived
-				} else if c.name == "" {
-					// Last resort: use the JID itself
+				} else {
+					// Last resort: use the JID itself (covers both empty name and
+					// unresolvable raw-JID cases when no participants were found).
 					c.name = c.jid
 				}
-				// else: keep the raw JID-style name if no participants found
 			}
 		} else {
 			phone := jidToPhone(c.jid)
@@ -487,7 +487,7 @@ func isPhoneNumber(s string) bool {
 		return false
 	}
 	check := s
-	if check[0] == '+' {
+	if strings.HasPrefix(check, "+") {
 		check = check[1:]
 	}
 	if len(check) == 0 {
