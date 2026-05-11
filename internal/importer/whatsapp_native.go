@@ -7,6 +7,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/maxghenis/openmessage/internal/db"
@@ -14,6 +15,10 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+// rawGroupJIDRe matches WhatsApp group JIDs of the form "<digits>-<digits>" with an optional "@g.us" suffix.
+// These appear when a group has no subject set (e.g. "16154856400-1585405251" or "16154856400-1585405251@g.us").
+var rawGroupJIDRe = regexp.MustCompile(`^\d+-\d+(@g\.us)?$`)
 
 // Default path to WhatsApp Desktop's Core Data SQLite database on macOS.
 var whatsappDefaultDBPath = filepath.Join(
@@ -285,9 +290,6 @@ func (w *WhatsAppNative) loadChats(waDB *sql.DB) ([]waChat, error) {
 		if c.name == "" && c.lastMessageTS == 0 {
 			continue
 		}
-		if c.name == "" {
-			c.name = c.jid
-		}
 
 		chats = append(chats, c)
 	}
@@ -300,10 +302,24 @@ func (w *WhatsAppNative) loadChats(waDB *sql.DB) ([]waChat, error) {
 		c := &chats[i]
 		if c.isGroup {
 			c.participants = w.loadGroupMembers(waDB, c.pk)
+			// If the group has no real name or only a raw JID-style identifier
+			// (e.g. "16154856400-1585405251"), derive a readable name from members.
+			if c.name == "" || rawGroupJIDRe.MatchString(c.name) {
+				if derived := deriveGroupName(c.participants); derived != "" {
+					c.name = derived
+				} else if c.name == "" {
+					// Last resort: use the JID itself
+					c.name = c.jid
+				}
+				// else: keep the raw JID-style name if no participants found
+			}
 		} else {
 			phone := jidToPhone(c.jid)
 			c.participants = []map[string]string{
 				{"name": c.name, "number": phone},
+			}
+			if c.name == "" {
+				c.name = c.jid
 			}
 		}
 	}
@@ -435,4 +451,52 @@ func jidToPhone(jid string) string {
 		return "+" + num
 	}
 	return ""
+}
+
+// deriveGroupName builds a human-readable conversation name from the group's
+// participant list. It prefers display names over raw phone numbers, and falls
+// back to phone numbers when no display names are available.
+func deriveGroupName(participants []map[string]string) string {
+	// First pass: collect participants whose name looks like a real name
+	// (not a bare E.164 phone number).
+	var displayNames []string
+	for _, p := range participants {
+		name := p["name"]
+		if name != "" && !isPhoneNumber(name) {
+			displayNames = append(displayNames, name)
+		}
+	}
+	if len(displayNames) > 0 {
+		return strings.Join(displayNames, ", ")
+	}
+
+	// Fall back to phone numbers / whatever names are available.
+	var names []string
+	for _, p := range participants {
+		if name := p["name"]; name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// isPhoneNumber reports whether s looks like an E.164 phone number (starts
+// with + and contains only digits thereafter, or is all digits).
+func isPhoneNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	check := s
+	if check[0] == '+' {
+		check = check[1:]
+	}
+	if len(check) == 0 {
+		return false
+	}
+	for _, c := range check {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
