@@ -36,7 +36,11 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 		args := req.GetArguments()
 		messageID := strArg(args, "message_id")
 		transcript := strArg(args, "transcript")
-		model := strArg(args, "model")
+		var model *string
+		if _, ok := args["model"]; ok {
+			modelValue := strArg(args, "model")
+			model = &modelValue
+		}
 		if messageID == "" {
 			return errorResult("set_message_transcript: message_id is required"), nil
 		}
@@ -50,9 +54,13 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 		if msg != nil && a.OnMessagesChange != nil {
 			a.OnMessagesChange(msg.ConversationID)
 		}
+		modelValue := ""
+		if msg != nil {
+			modelValue = msg.TranscriptModel
+		}
 		return textResult(fmt.Sprintf(
 			"Transcript saved for message %s (%d chars, model=%q).",
-			messageID, len(transcript), model,
+			messageID, len(transcript), modelValue,
 		)), nil
 	}
 }

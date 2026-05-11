@@ -370,6 +370,73 @@ func TestSetTranscriptNotFound(t *testing.T) {
 	}
 }
 
+func TestSetTranscriptRequiresTranscriptField(t *testing.T) {
+	ts := newTestServer(t)
+
+	resp, err := http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"audio-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("got status %d, want 400: %s", resp.StatusCode, body)
+	}
+}
+
+func TestSetTranscriptPreservesModelWhenOmitted(t *testing.T) {
+	ts := newTestServer(t)
+
+	if err := ts.store.UpsertConversation(&db.Conversation{
+		ConversationID: "c1",
+		Name:           "Alice",
+		LastMessageTS:  100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.store.UpsertMessage(&db.Message{
+		MessageID:      "audio-1",
+		ConversationID: "c1",
+		Body:           "[Voice note]",
+		MediaID:        "media-1",
+		MimeType:       "audio/ogg",
+		TimestampMS:    100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"audio-1","transcript":"hello world","model":"whisper-large-v3"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initial transcript status = %d, want 200", resp.StatusCode)
+	}
+
+	resp, err = http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"audio-1","transcript":"refined text"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("got status %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	msg, err := ts.store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Transcript != "refined text" {
+		t.Fatalf("transcript = %q, want refined text", msg.Transcript)
+	}
+	if msg.TranscriptModel != "whisper-large-v3" {
+		t.Fatalf("model = %q, want whisper-large-v3", msg.TranscriptModel)
+	}
+}
+
 func TestGetMessagesWithLimit(t *testing.T) {
 	ts := newTestServer(t)
 

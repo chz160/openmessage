@@ -367,10 +367,10 @@ func (s *Store) GetMessagesByConversations(conversationIDs []string, limit int) 
 			SELECT `+messageColumns+`
 			FROM messages
 			WHERE conversation_id IN (`+strings.Join(placeholders, ",")+`)
-			ORDER BY timestamp_ms DESC
+			ORDER BY timestamp_ms DESC, message_id DESC
 			LIMIT ?
 		)
-		ORDER BY timestamp_ms ASC
+		ORDER BY timestamp_ms ASC, message_id ASC
 	`, args...)
 	if err != nil {
 		return nil, err
@@ -409,10 +409,10 @@ func (s *Store) GetMessagesByConversationsRange(conversationIDs []string, afterM
 			SELECT `+messageColumns+`
 			FROM messages
 			WHERE `+conditions+`
-			ORDER BY timestamp_ms DESC
+			ORDER BY timestamp_ms DESC, message_id DESC
 			LIMIT ?
 		)
-		ORDER BY timestamp_ms ASC
+		ORDER BY timestamp_ms ASC, message_id ASC
 	`, args...)
 	if err != nil {
 		return nil, err
@@ -515,7 +515,7 @@ func scanMessages(rows interface {
 
 // SetMessageTranscript writes a transcript for an existing message. It does
 // not modify the message's body, media_id, or mime_type.
-func (s *Store) SetMessageTranscript(messageID, transcript, model string) error {
+func (s *Store) SetMessageTranscript(messageID, transcript string, model *string) error {
 	if messageID == "" {
 		return fmt.Errorf("SetMessageTranscript: empty message_id")
 	}
@@ -528,8 +528,11 @@ func (s *Store) SetMessageTranscript(messageID, transcript, model string) error 
 	}
 
 	nowMS := msg.TranscribedAtMS
-	modelToSave := model
-	needsTimestampUpdate := msg.Transcript != transcript || msg.TranscriptModel != model || msg.TranscribedAtMS == 0
+	modelToSave := msg.TranscriptModel
+	if model != nil {
+		modelToSave = *model
+	}
+	needsTimestampUpdate := msg.Transcript != transcript || msg.TranscriptModel != modelToSave || msg.TranscribedAtMS == 0
 	switch {
 	case transcript == "":
 		nowMS = 0

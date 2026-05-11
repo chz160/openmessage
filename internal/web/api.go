@@ -1015,9 +1015,9 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			return
 		}
 		var req struct {
-			MessageID  string `json:"message_id"`
-			Transcript string `json:"transcript"`
-			Model      string `json:"model,omitempty"`
+			MessageID  string  `json:"message_id"`
+			Transcript *string `json:"transcript"`
+			Model      *string `json:"model,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			httpError(w, "invalid JSON: "+err.Error(), 400)
@@ -1027,7 +1027,11 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			httpError(w, "message_id required", 400)
 			return
 		}
-		if err := store.SetMessageTranscript(req.MessageID, req.Transcript, req.Model); err != nil {
+		if req.Transcript == nil {
+			httpError(w, "transcript required", 400)
+			return
+		}
+		if err := store.SetMessageTranscript(req.MessageID, *req.Transcript, req.Model); err != nil {
 			if errors.Is(err, db.ErrMessageNotFound) {
 				httpError(w, "message not found", 404)
 				return
@@ -1046,7 +1050,7 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 		writeJSON(w, map[string]any{
 			"success":           true,
 			"message_id":        req.MessageID,
-			"transcript_length": len(req.Transcript),
+			"transcript_length": len(*req.Transcript),
 		})
 	})
 

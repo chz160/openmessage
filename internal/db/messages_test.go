@@ -385,6 +385,56 @@ func TestGetMessagesByConversationsRangeReturnsNewestLimitAscending(t *testing.T
 	}
 }
 
+func TestGetMessagesByConversationsUsesMessageIDTieBreaker(t *testing.T) {
+	store := newTestStore(t)
+
+	for _, msg := range []*Message{
+		{MessageID: "a", ConversationID: "conv-1", TimestampMS: 1000},
+		{MessageID: "b", ConversationID: "conv-1", TimestampMS: 1000},
+		{MessageID: "c", ConversationID: "conv-1", TimestampMS: 1000},
+	} {
+		if err := store.UpsertMessage(msg); err != nil {
+			t.Fatalf("seed %s: %v", msg.MessageID, err)
+		}
+	}
+
+	got, err := store.GetMessagesByConversations([]string{"conv-1"}, 2)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("count: got %d, want 2", len(got))
+	}
+	if got[0].MessageID != "b" || got[1].MessageID != "c" {
+		t.Fatalf("got ids [%s %s], want [b c]", got[0].MessageID, got[1].MessageID)
+	}
+}
+
+func TestGetMessagesByConversationsRangeUsesMessageIDTieBreaker(t *testing.T) {
+	store := newTestStore(t)
+
+	for _, msg := range []*Message{
+		{MessageID: "a", ConversationID: "conv-1", TimestampMS: 1000},
+		{MessageID: "b", ConversationID: "conv-1", TimestampMS: 1000},
+		{MessageID: "c", ConversationID: "conv-1", TimestampMS: 1000},
+	} {
+		if err := store.UpsertMessage(msg); err != nil {
+			t.Fatalf("seed %s: %v", msg.MessageID, err)
+		}
+	}
+
+	got, err := store.GetMessagesByConversationsRange([]string{"conv-1"}, 900, 1100, 2)
+	if err != nil {
+		t.Fatalf("get range: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("count: got %d, want 2", len(got))
+	}
+	if got[0].MessageID != "b" || got[1].MessageID != "c" {
+		t.Fatalf("got ids [%s %s], want [b c]", got[0].MessageID, got[1].MessageID)
+	}
+}
+
 func TestSetMessageTranscript(t *testing.T) {
 	store := newTestStore(t)
 
@@ -411,7 +461,8 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Errorf("expected zero transcribed_at, got %d", got.TranscribedAtMS)
 	}
 
-	if err := store.SetMessageTranscript("audio-1", "hello world", "faster-whisper:base.en"); err != nil {
+	initialModel := "faster-whisper:base.en"
+	if err := store.SetMessageTranscript("audio-1", "hello world", &initialModel); err != nil {
 		t.Fatalf("set transcript: %v", err)
 	}
 
@@ -441,7 +492,8 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Fatalf("transcript wiped by re-sync — got %q", got.Transcript)
 	}
 
-	if err := store.SetMessageTranscript("audio-1", "better text", "faster-whisper:large-v3"); err != nil {
+	updatedModel := "faster-whisper:large-v3"
+	if err := store.SetMessageTranscript("audio-1", "better text", &updatedModel); err != nil {
 		t.Fatalf("set transcript again: %v", err)
 	}
 	got, err = store.GetMessageByID("audio-1")
@@ -459,7 +511,7 @@ func TestSetMessageTranscript(t *testing.T) {
 	}
 
 	updatedAt := got.TranscribedAtMS
-	if err := store.SetMessageTranscript("audio-1", "better text", "faster-whisper:large-v3"); err != nil {
+	if err := store.SetMessageTranscript("audio-1", "better text", &updatedModel); err != nil {
 		t.Fatalf("idempotent rewrite: %v", err)
 	}
 	got, err = store.GetMessageByID("audio-1")
@@ -470,7 +522,19 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Errorf("unchanged transcribed_at on identical rewrite: got %d, want %d", got.TranscribedAtMS, updatedAt)
 	}
 
-	if err := store.SetMessageTranscript("audio-1", "", "faster-whisper:large-v3"); err != nil {
+	if err := store.SetMessageTranscript("audio-1", "updated text without new model", nil); err != nil {
+		t.Fatalf("preserve model when omitted: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TranscriptModel != "faster-whisper:large-v3" {
+		t.Fatalf("model changed when omitted: got %q, want faster-whisper:large-v3", got.TranscriptModel)
+	}
+
+	clearModel := "faster-whisper:large-v3"
+	if err := store.SetMessageTranscript("audio-1", "", &clearModel); err != nil {
 		t.Fatalf("clear transcript: %v", err)
 	}
 	got, err = store.GetMessageByID("audio-1")
@@ -481,7 +545,7 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Errorf("expected transcript metadata cleared, got transcript=%q transcribed_at=%d model=%q", got.Transcript, got.TranscribedAtMS, got.TranscriptModel)
 	}
 
-	if err := store.SetMessageTranscript("nonexistent", "x", ""); err == nil {
+	if err := store.SetMessageTranscript("nonexistent", "x", nil); err == nil {
 		t.Errorf("expected error for nonexistent message_id")
 	}
 
