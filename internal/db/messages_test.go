@@ -391,7 +391,7 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.TranscribedAtMS != updatedAt {
-		t.Errorf("expected unchanged transcribed_at on identical rewrite: got %d want %d", got.TranscribedAtMS, updatedAt)
+		t.Errorf("unchanged transcribed_at on identical rewrite: got %d, want %d", got.TranscribedAtMS, updatedAt)
 	}
 
 	if err := store.SetMessageTranscript("audio-1", "", "faster-whisper:large-v3"); err != nil {
