@@ -54,13 +54,13 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 		if msg != nil && a.OnMessagesChange != nil {
 			a.OnMessagesChange(msg.ConversationID)
 		}
-		modelValue := ""
+		storedModel := ""
 		if msg != nil {
-			modelValue = msg.TranscriptModel
+			storedModel = msg.TranscriptModel
 		}
 		return textResult(fmt.Sprintf(
 			"Transcript saved for message %s (%d chars, model=%q).",
-			messageID, len(transcript), modelValue,
+			messageID, len(transcript), storedModel,
 		)), nil
 	}
 }

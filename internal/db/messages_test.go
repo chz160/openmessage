@@ -461,8 +461,8 @@ func TestSetMessageTranscript(t *testing.T) {
 		t.Errorf("expected zero transcribed_at, got %d", got.TranscribedAtMS)
 	}
 
-	initialModel := "faster-whisper:base.en"
-	if err := store.SetMessageTranscript("audio-1", "hello world", &initialModel); err != nil {
+	firstModel := "faster-whisper:base.en"
+	if err := store.SetMessageTranscript("audio-1", "hello world", &firstModel); err != nil {
 		t.Fatalf("set transcript: %v", err)
 	}
 
