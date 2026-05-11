@@ -13,11 +13,11 @@ import (
 func setMessageTranscriptTool() mcp.Tool {
 	return mcp.NewTool("set_message_transcript",
 		mcp.WithDescription(
-			"Save a transcript for an existing audio or voice message. The audio metadata is preserved and calling again overwrites the prior transcript.",
+			"Save a transcript for an existing message. The original body and media metadata are preserved, and calling again overwrites the prior transcript.",
 		),
 		mcp.WithString("message_id",
 			mcp.Required(),
-			mcp.Description("The message_id of the audio message to transcribe."),
+			mcp.Description("The message_id of the message to annotate with transcript text."),
 		),
 		mcp.WithString("transcript",
 			mcp.Required(),
@@ -43,7 +43,10 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 		if err := a.Store.SetMessageTranscript(messageID, transcript, model); err != nil {
 			return errorResult(fmt.Sprintf("set_message_transcript: %v", err)), nil
 		}
-		msg, _ := a.Store.GetMessageByID(messageID)
+		msg, err := a.Store.GetMessageByID(messageID)
+		if err != nil {
+			return errorResult(fmt.Sprintf("set_message_transcript: reload message: %v", err)), nil
+		}
 		if msg != nil && a.OnMessagesChange != nil {
 			a.OnMessagesChange(msg.ConversationID)
 		}

@@ -11,7 +11,7 @@ import (
 // messageColumns is the canonical column list for SELECT queries on messages.
 const messageColumns = `message_id, conversation_id, sender_name, sender_number, body, timestamp_ms, status, is_from_me, mentions_me, media_id, mime_type, decryption_key, reactions, reply_to_id, source_platform, source_id, transcript, transcribed_at, transcript_model`
 
-var ErrNotFound = errors.New("not found")
+var ErrMessageNotFound = errors.New("message not found")
 
 func (s *Store) UpsertMessage(m *Message) error {
 	tx, err := s.db.Begin()
@@ -511,12 +511,28 @@ func (s *Store) SetMessageTranscript(messageID, transcript, model string) error 
 	if messageID == "" {
 		return fmt.Errorf("SetMessageTranscript: empty message_id")
 	}
-	nowMS := time.Now().UnixMilli()
+	msg, err := s.GetMessageByID(messageID)
+	if err != nil {
+		return fmt.Errorf("SetMessageTranscript: get message: %w", err)
+	}
+	if msg == nil {
+		return ErrMessageNotFound
+	}
+
+	nowMS := msg.TranscribedAtMS
+	modelToSave := model
+	switch {
+	case transcript == "":
+		nowMS = 0
+		modelToSave = ""
+	case msg.Transcript != transcript || msg.TranscriptModel != model || msg.TranscribedAtMS == 0:
+		nowMS = time.Now().UnixMilli()
+	}
 	res, err := s.db.Exec(`
 		UPDATE messages
 		   SET transcript = ?, transcribed_at = ?, transcript_model = ?
 		 WHERE message_id = ?
-	`, transcript, nowMS, model, messageID)
+	`, transcript, nowMS, modelToSave, messageID)
 	if err != nil {
 		return fmt.Errorf("SetMessageTranscript: %w", err)
 	}
@@ -525,7 +541,7 @@ func (s *Store) SetMessageTranscript(messageID, transcript, model string) error 
 		return fmt.Errorf("SetMessageTranscript: rows affected: %w", err)
 	}
 	if n == 0 {
-		return ErrNotFound
+		return ErrMessageNotFound
 	}
 	return nil
 }

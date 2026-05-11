@@ -352,6 +352,7 @@ func TestSetMessageTranscript(t *testing.T) {
 	if got.TranscribedAtMS == 0 {
 		t.Errorf("expected non-zero transcribed_at")
 	}
+	firstTranscribedAt := got.TranscribedAtMS
 
 	if err := store.UpsertMessage(msg); err != nil {
 		t.Fatalf("re-upsert: %v", err)
@@ -376,6 +377,32 @@ func TestSetMessageTranscript(t *testing.T) {
 	}
 	if got.TranscriptModel != "faster-whisper:large-v3" {
 		t.Errorf("model not overwritten: %q", got.TranscriptModel)
+	}
+	if got.TranscribedAtMS <= firstTranscribedAt {
+		t.Errorf("expected updated transcribed_at, got %d <= %d", got.TranscribedAtMS, firstTranscribedAt)
+	}
+
+	updatedAt := got.TranscribedAtMS
+	if err := store.SetMessageTranscript("audio-1", "better text", "faster-whisper:large-v3"); err != nil {
+		t.Fatalf("idempotent rewrite: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TranscribedAtMS != updatedAt {
+		t.Errorf("expected unchanged transcribed_at on identical rewrite: got %d want %d", got.TranscribedAtMS, updatedAt)
+	}
+
+	if err := store.SetMessageTranscript("audio-1", "", "faster-whisper:large-v3"); err != nil {
+		t.Fatalf("clear transcript: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "" || got.TranscribedAtMS != 0 || got.TranscriptModel != "" {
+		t.Errorf("expected transcript metadata cleared, got transcript=%q transcribed_at=%d model=%q", got.Transcript, got.TranscribedAtMS, got.TranscriptModel)
 	}
 
 	if err := store.SetMessageTranscript("nonexistent", "x", ""); err == nil {

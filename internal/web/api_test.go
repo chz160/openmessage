@@ -355,6 +355,21 @@ func TestSetTranscript(t *testing.T) {
 	}
 }
 
+func TestSetTranscriptNotFound(t *testing.T) {
+	ts := newTestServer(t)
+
+	resp, err := http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"missing","transcript":"hello world"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("got status %d, want 404: %s", resp.StatusCode, body)
+	}
+}
+
 func TestGetMessagesWithLimit(t *testing.T) {
 	ts := newTestServer(t)
 

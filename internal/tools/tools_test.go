@@ -957,6 +957,11 @@ func TestFormatMessageBody(t *testing.T) {
 	if !strings.Contains(got, `Transcript: "hello world"`) {
 		t.Errorf("transcript: expected inline transcript, got: %s", got)
 	}
+
+	got = formatMessageBody("", "media-123", "audio/ogg", "msg-7", "hello \"world\"\nnext line")
+	if !strings.Contains(got, `Transcript: "hello \"world\"\nnext line"`) {
+		t.Errorf("quoted transcript: expected escaped transcript, got: %s", got)
+	}
 }
 
 func TestGetMessagesMediaIndicator(t *testing.T) {

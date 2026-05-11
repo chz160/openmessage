@@ -1028,7 +1028,7 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 			return
 		}
 		if err := store.SetMessageTranscript(req.MessageID, req.Transcript, req.Model); err != nil {
-			if errors.Is(err, db.ErrNotFound) {
+			if errors.Is(err, db.ErrMessageNotFound) {
 				httpError(w, "message not found", 404)
 				return
 			}
