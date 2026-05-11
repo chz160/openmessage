@@ -387,6 +387,11 @@ func TestSessionStoreDSNNormalizesWindowsDrivePaths(t *testing.T) {
 	if strings.Contains(got, `%5C`) {
 		t.Fatalf("dsn should not contain encoded backslashes: %q", got)
 	}
+
+	gotLowercaseDrive := sessionStoreDSN(`c:\Users\Alice\openmessage\wa store.db`)
+	if !strings.HasPrefix(gotLowercaseDrive, "file:///c:/Users/Alice/openmessage/wa%20store.db?") {
+		t.Fatalf("dsn did not normalize lowercase windows drive path correctly: %q", gotLowercaseDrive)
+	}
 }
 
 func TestSessionStoreReadOnlyDSNUsesReadOnlyMode(t *testing.T) {
