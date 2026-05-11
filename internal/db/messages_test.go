@@ -309,6 +309,88 @@ func TestGetMessagesByConversation(t *testing.T) {
 	})
 }
 
+func TestSetMessageTranscript(t *testing.T) {
+	store := newTestStore(t)
+
+	msg := &Message{
+		MessageID:      "audio-1",
+		ConversationID: "conv-1",
+		Body:           "[Voice note]",
+		MediaID:        "media-x",
+		MimeType:       "audio/ogg",
+		TimestampMS:    1700000000000,
+	}
+	if err := store.UpsertMessage(msg); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	got, err := store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "" {
+		t.Errorf("expected empty transcript, got %q", got.Transcript)
+	}
+	if got.TranscribedAtMS != 0 {
+		t.Errorf("expected zero transcribed_at, got %d", got.TranscribedAtMS)
+	}
+
+	if err := store.SetMessageTranscript("audio-1", "hello world", "faster-whisper:base.en"); err != nil {
+		t.Fatalf("set transcript: %v", err)
+	}
+
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "hello world" {
+		t.Errorf("transcript: %q", got.Transcript)
+	}
+	if got.TranscriptModel != "faster-whisper:base.en" {
+		t.Errorf("model: %q", got.TranscriptModel)
+	}
+	if got.TranscribedAtMS == 0 {
+		t.Errorf("expected non-zero transcribed_at")
+	}
+
+	if err := store.UpsertMessage(msg); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "hello world" {
+		t.Fatalf("transcript wiped by re-sync — got %q", got.Transcript)
+	}
+
+	if err := store.SetMessageTranscript("audio-1", "better text", "faster-whisper:large-v3"); err != nil {
+		t.Fatalf("set transcript again: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "better text" {
+		t.Errorf("transcript not overwritten: %q", got.Transcript)
+	}
+	if got.TranscriptModel != "faster-whisper:large-v3" {
+		t.Errorf("model not overwritten: %q", got.TranscriptModel)
+	}
+
+	if err := store.SetMessageTranscript("nonexistent", "x", ""); err == nil {
+		t.Errorf("expected error for nonexistent message_id")
+	}
+
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != "[Voice note]" || got.MediaID != "media-x" || got.MimeType != "audio/ogg" {
+		t.Errorf("audio metadata mutated: body=%q media_id=%q mime_type=%q", got.Body, got.MediaID, got.MimeType)
+	}
+}
+
 func TestSearchMessages_Comprehensive(t *testing.T) {
 	store := newTestStore(t)
 

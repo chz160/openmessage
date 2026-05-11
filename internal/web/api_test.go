@@ -294,6 +294,67 @@ func TestGetMessagesSupportsConversationIDsWithSlashes(t *testing.T) {
 	}
 }
 
+func TestSetTranscript(t *testing.T) {
+	ts := newTestServer(t)
+
+	if err := ts.store.UpsertConversation(&db.Conversation{
+		ConversationID: "c1",
+		Name:           "Alice",
+		LastMessageTS:  100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.store.UpsertMessage(&db.Message{
+		MessageID:      "audio-1",
+		ConversationID: "c1",
+		Body:           "[Voice note]",
+		MediaID:        "media-1",
+		MimeType:       "audio/ogg",
+		TimestampMS:    100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"audio-1","transcript":"hello world","model":"whisper-large-v3"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("got status %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if success, _ := got["success"].(bool); !success {
+		t.Fatalf("expected success=true, got %#v", got["success"])
+	}
+	if got["message_id"] != "audio-1" {
+		t.Fatalf("message_id = %#v, want audio-1", got["message_id"])
+	}
+
+	msg, err := ts.store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg == nil {
+		t.Fatal("expected message")
+	}
+	if msg.Transcript != "hello world" {
+		t.Fatalf("transcript = %q, want hello world", msg.Transcript)
+	}
+	if msg.TranscriptModel != "whisper-large-v3" {
+		t.Fatalf("model = %q, want whisper-large-v3", msg.TranscriptModel)
+	}
+	if msg.TranscribedAtMS == 0 {
+		t.Fatal("expected non-zero transcribed_at")
+	}
+}
+
 func TestGetMessagesWithLimit(t *testing.T) {
 	ts := newTestServer(t)
 

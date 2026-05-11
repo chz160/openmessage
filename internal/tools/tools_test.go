@@ -918,13 +918,13 @@ func TestListContacts(t *testing.T) {
 
 func TestFormatMessageBody(t *testing.T) {
 	// Plain text message — no media
-	got := formatMessageBody("Hello!", "", "", "msg-1")
+	got := formatMessageBody("Hello!", "", "", "msg-1", "")
 	if got != "Hello!" {
 		t.Errorf("plain text: expected 'Hello!', got: %s", got)
 	}
 
 	// Voice message with no body text
-	got = formatMessageBody("", "media-123", "audio/ogg", "msg-2")
+	got = formatMessageBody("", "media-123", "audio/ogg", "msg-2", "")
 	if !strings.Contains(got, "voice message") {
 		t.Errorf("voice message: expected 'voice message' tag, got: %s", got)
 	}
@@ -933,7 +933,7 @@ func TestFormatMessageBody(t *testing.T) {
 	}
 
 	// Image with caption
-	got = formatMessageBody("Check this out", "media-456", "image/jpeg", "msg-3")
+	got = formatMessageBody("Check this out", "media-456", "image/jpeg", "msg-3", "")
 	if !strings.Contains(got, "Check this out") {
 		t.Errorf("image with caption: expected caption, got: %s", got)
 	}
@@ -942,15 +942,20 @@ func TestFormatMessageBody(t *testing.T) {
 	}
 
 	// Video
-	got = formatMessageBody("", "media-789", "video/mp4", "msg-4")
+	got = formatMessageBody("", "media-789", "video/mp4", "msg-4", "")
 	if !strings.Contains(got, "video") {
 		t.Errorf("video: expected 'video' tag, got: %s", got)
 	}
 
 	// Unknown attachment type
-	got = formatMessageBody("", "media-000", "application/pdf", "msg-5")
+	got = formatMessageBody("", "media-000", "application/pdf", "msg-5", "")
 	if !strings.Contains(got, "attachment") {
 		t.Errorf("unknown: expected 'attachment' tag, got: %s", got)
+	}
+
+	got = formatMessageBody("", "media-123", "audio/ogg", "msg-6", "hello world")
+	if !strings.Contains(got, `Transcript: "hello world"`) {
+		t.Errorf("transcript: expected inline transcript, got: %s", got)
 	}
 }
 
