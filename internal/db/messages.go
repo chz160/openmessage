@@ -521,12 +521,16 @@ func (s *Store) SetMessageTranscript(messageID, transcript, model string) error 
 
 	nowMS := msg.TranscribedAtMS
 	modelToSave := model
+	needsTimestampUpdate := msg.Transcript != transcript || msg.TranscriptModel != model || msg.TranscribedAtMS == 0
 	switch {
 	case transcript == "":
 		nowMS = 0
 		modelToSave = ""
-	case msg.Transcript != transcript || msg.TranscriptModel != model || msg.TranscribedAtMS == 0:
+	case needsTimestampUpdate:
 		nowMS = time.Now().UnixMilli()
+		if nowMS <= msg.TranscribedAtMS {
+			nowMS = msg.TranscribedAtMS + 1
+		}
 	}
 	res, err := s.db.Exec(`
 		UPDATE messages
