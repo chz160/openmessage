@@ -7437,7 +7437,20 @@ body::after {
 
   function setConnectionState() {
     if (!$connectionBanner) return;
+    const hasSecondaryPlatformPairing = whatsAppStatus.paired
+      || whatsAppStatus.connected
+      || signalStatus.paired
+      || signalStatus.connected;
     if (googleStatus.connected) {
+      if (!hasSecondaryPlatformPairing) {
+        $connectionBanner.className = 'connection-banner';
+        $connectionBanner.style.display = 'flex';
+        $connectionBannerCopy.textContent = 'Add WhatsApp or Signal to connect more conversations';
+        $connectionBannerAction.textContent = 'Platforms';
+        $connectionBannerAction.dataset.action = 'open-platforms';
+        $connectionBannerAction.style.display = '';
+        return;
+      }
       $connectionBanner.style.display = 'none';
       return;
     }
