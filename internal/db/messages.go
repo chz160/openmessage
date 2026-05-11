@@ -31,8 +31,8 @@ func (s *Store) UpsertMessage(m *Message) error {
 
 func upsertMessageTx(tx *sql.Tx, m *Message) error {
 	_, err := tx.Exec(`
-		INSERT INTO messages (message_id, conversation_id, sender_name, sender_number, body, timestamp_ms, status, is_from_me, mentions_me, media_id, mime_type, decryption_key, reactions, reply_to_id, source_platform, source_id, transcript, transcribed_at, transcript_model)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO messages (message_id, conversation_id, sender_name, sender_number, body, timestamp_ms, status, is_from_me, mentions_me, media_id, mime_type, decryption_key, reactions, reply_to_id, source_platform, source_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(message_id) DO UPDATE SET
 			conversation_id=excluded.conversation_id,
 			sender_name=excluded.sender_name,
@@ -49,7 +49,7 @@ func upsertMessageTx(tx *sql.Tx, m *Message) error {
 			reply_to_id=excluded.reply_to_id,
 			source_platform=excluded.source_platform,
 			source_id=excluded.source_id
-	`, m.MessageID, m.ConversationID, m.SenderName, m.SenderNumber, m.Body, m.TimestampMS, m.Status, m.IsFromMe, m.MentionsMe, m.MediaID, m.MimeType, m.DecryptionKey, m.Reactions, m.ReplyToID, m.SourcePlatform, m.SourceID, m.Transcript, m.TranscribedAtMS, m.TranscriptModel)
+	`, m.MessageID, m.ConversationID, m.SenderName, m.SenderNumber, m.Body, m.TimestampMS, m.Status, m.IsFromMe, m.MentionsMe, m.MediaID, m.MimeType, m.DecryptionKey, m.Reactions, m.ReplyToID, m.SourcePlatform, m.SourceID)
 	if err != nil {
 		return err
 	}

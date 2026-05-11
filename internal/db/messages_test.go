@@ -126,6 +126,37 @@ func TestUpsertMessage_InsertAndUpdate(t *testing.T) {
 			t.Error("MentionsMe: got false, want true")
 		}
 	})
+
+	t.Run("upsert ignores transcript fields", func(t *testing.T) {
+		msg := &Message{
+			MessageID:       "msg-transcript",
+			ConversationID:  "conv-1",
+			Body:            "[Voice note]",
+			MediaID:         "media-1",
+			MimeType:        "audio/ogg",
+			TimestampMS:     3000,
+			Transcript:      "seeded transcript",
+			TranscribedAtMS: 12345,
+			TranscriptModel: "whisper-large-v3",
+			SourcePlatform:  "sms",
+			SenderName:      "Alice",
+			SenderNumber:    "+15551234567",
+		}
+		if err := store.UpsertMessage(msg); err != nil {
+			t.Fatalf("upsert transcript-bearing message: %v", err)
+		}
+
+		got, err := store.GetMessageByID("msg-transcript")
+		if err != nil {
+			t.Fatalf("get message: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected message, got nil")
+		}
+		if got.Transcript != "" || got.TranscribedAtMS != 0 || got.TranscriptModel != "" {
+			t.Fatalf("UpsertMessage should not persist transcript fields, got transcript=%q transcribed_at=%d model=%q", got.Transcript, got.TranscribedAtMS, got.TranscriptModel)
+		}
+	})
 }
 
 func TestGetMessages_Filters(t *testing.T) {
