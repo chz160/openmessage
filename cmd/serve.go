@@ -507,10 +507,14 @@ func macOSNotificationsEnabled(interactive bool) bool {
 	if !interactive {
 		return false
 	}
-	return strings.EqualFold(runtimeGOOS(), "darwin")
+	return isDarwin()
 }
 
 func iMessageSyncSupported() bool {
+	return isDarwin()
+}
+
+func isDarwin() bool {
 	return strings.EqualFold(runtimeGOOS(), "darwin")
 }
 
