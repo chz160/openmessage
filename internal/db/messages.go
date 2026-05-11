@@ -363,10 +363,14 @@ func (s *Store) GetMessagesByConversations(conversationIDs []string, limit int) 
 
 	rows, err := s.db.Query(`
 		SELECT `+messageColumns+`
-		FROM messages
-		WHERE conversation_id IN (`+strings.Join(placeholders, ",")+`)
-		ORDER BY timestamp_ms ASC
-		LIMIT ?
+		FROM (
+			SELECT `+messageColumns+`
+			FROM messages
+			WHERE conversation_id IN (`+strings.Join(placeholders, ",")+`)
+			ORDER BY timestamp_ms DESC, message_id DESC
+			LIMIT ?
+		)
+		ORDER BY timestamp_ms ASC, message_id ASC
 	`, args...)
 	if err != nil {
 		return nil, err
@@ -401,10 +405,14 @@ func (s *Store) GetMessagesByConversationsRange(conversationIDs []string, afterM
 
 	rows, err := s.db.Query(`
 		SELECT `+messageColumns+`
-		FROM messages
-		WHERE `+conditions+`
-		ORDER BY timestamp_ms ASC
-		LIMIT ?
+		FROM (
+			SELECT `+messageColumns+`
+			FROM messages
+			WHERE `+conditions+`
+			ORDER BY timestamp_ms DESC, message_id DESC
+			LIMIT ?
+		)
+		ORDER BY timestamp_ms ASC, message_id ASC
 	`, args...)
 	if err != nil {
 		return nil, err

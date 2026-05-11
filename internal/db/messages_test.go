@@ -309,6 +309,82 @@ func TestGetMessagesByConversation(t *testing.T) {
 	})
 }
 
+func TestGetMessagesByConversationsReturnsNewestLimitAscending(t *testing.T) {
+	store := newTestStore(t)
+
+	for i := 0; i < 6; i++ {
+		if err := store.UpsertMessage(&Message{
+			MessageID:      fmt.Sprintf("conv-1-%d", i),
+			ConversationID: "conv-1",
+			Body:           fmt.Sprintf("c1 msg %d", i),
+			TimestampMS:    int64(1000 + i*100),
+		}); err != nil {
+			t.Fatalf("seed conv-1 message %d: %v", i, err)
+		}
+		if err := store.UpsertMessage(&Message{
+			MessageID:      fmt.Sprintf("conv-2-%d", i),
+			ConversationID: "conv-2",
+			Body:           fmt.Sprintf("c2 msg %d", i),
+			TimestampMS:    int64(1050 + i*100),
+		}); err != nil {
+			t.Fatalf("seed conv-2 message %d: %v", i, err)
+		}
+	}
+
+	got, err := store.GetMessagesByConversations([]string{"conv-1", "conv-2"}, 5)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("count: got %d, want 5", len(got))
+	}
+
+	wantIDs := []string{"conv-2-3", "conv-1-4", "conv-2-4", "conv-1-5", "conv-2-5"}
+	for i, want := range wantIDs {
+		if got[i].MessageID != want {
+			t.Fatalf("msg[%d]: got %q, want %q", i, got[i].MessageID, want)
+		}
+	}
+}
+
+func TestGetMessagesByConversationsRangeReturnsNewestLimitAscending(t *testing.T) {
+	store := newTestStore(t)
+
+	for i := 0; i < 6; i++ {
+		if err := store.UpsertMessage(&Message{
+			MessageID:      fmt.Sprintf("range-1-%d", i),
+			ConversationID: "conv-1",
+			Body:           fmt.Sprintf("range c1 msg %d", i),
+			TimestampMS:    int64(1000 + i*100),
+		}); err != nil {
+			t.Fatalf("seed range conv-1 message %d: %v", i, err)
+		}
+		if err := store.UpsertMessage(&Message{
+			MessageID:      fmt.Sprintf("range-2-%d", i),
+			ConversationID: "conv-2",
+			Body:           fmt.Sprintf("range c2 msg %d", i),
+			TimestampMS:    int64(1050 + i*100),
+		}); err != nil {
+			t.Fatalf("seed range conv-2 message %d: %v", i, err)
+		}
+	}
+
+	got, err := store.GetMessagesByConversationsRange([]string{"conv-1", "conv-2"}, 1200, 1600, 4)
+	if err != nil {
+		t.Fatalf("get range: %v", err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("count: got %d, want 4", len(got))
+	}
+
+	wantIDs := []string{"range-1-4", "range-2-4", "range-1-5", "range-2-5"}
+	for i, want := range wantIDs {
+		if got[i].MessageID != want {
+			t.Fatalf("msg[%d]: got %q, want %q", i, got[i].MessageID, want)
+		}
+	}
+}
+
 func TestSetMessageTranscript(t *testing.T) {
 	store := newTestStore(t)
 
