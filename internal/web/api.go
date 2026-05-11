@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
@@ -1050,7 +1051,7 @@ func APIHandlerWithOptions(store *db.Store, cli *client.Client, logger zerolog.L
 		writeJSON(w, map[string]any{
 			"success":           true,
 			"message_id":        req.MessageID,
-			"transcript_length": len(*req.Transcript),
+			"transcript_length": utf8.RuneCountInString(*req.Transcript),
 		})
 	})
 

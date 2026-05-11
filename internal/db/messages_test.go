@@ -575,6 +575,16 @@ func TestSetMessageTranscript(t *testing.T) {
 	if got.Transcript != "" || got.TranscribedAtMS != 0 || got.TranscriptModel != "" {
 		t.Errorf("expected transcript metadata cleared, got transcript=%q transcribed_at=%d model=%q", got.Transcript, got.TranscribedAtMS, got.TranscriptModel)
 	}
+	if err := store.SetMessageTranscript("audio-1", "", nil); err != nil {
+		t.Fatalf("idempotent clear: %v", err)
+	}
+	got, err = store.GetMessageByID("audio-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "" || got.TranscribedAtMS != 0 || got.TranscriptModel != "" {
+		t.Errorf("expected cleared transcript metadata after idempotent clear, got transcript=%q transcribed_at=%d model=%q", got.Transcript, got.TranscribedAtMS, got.TranscriptModel)
+	}
 
 	if err := store.SetMessageTranscript("nonexistent", "x", nil); err == nil {
 		t.Errorf("expected error for nonexistent message_id")

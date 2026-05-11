@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -60,7 +61,7 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 		}
 		return textResult(fmt.Sprintf(
 			"Transcript saved for message %s (%d chars, model=%q).",
-			messageID, len(transcript), storedModel,
+			messageID, utf8.RuneCountInString(transcript), storedModel,
 		)), nil
 	}
 }

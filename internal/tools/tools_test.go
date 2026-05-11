@@ -999,6 +999,38 @@ func TestGetMessagesMediaIndicator(t *testing.T) {
 	}
 }
 
+func TestSetMessageTranscriptReportsCharacterCount(t *testing.T) {
+	a := testApp(t)
+	if err := a.Store.UpsertMessage(&db.Message{
+		MessageID:      "audio-1",
+		ConversationID: "c1",
+		MediaID:        "media-1",
+		MimeType:       "audio/ogg",
+		TimestampMS:    time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert message: %v", err)
+	}
+
+	handler := setMessageTranscriptHandler(a)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"message_id": "audio-1",
+		"transcript": "hé🙂",
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	text := result.Content[0].(mcp.TextContent).Text
+	if !strings.Contains(text, "(3 chars,") {
+		t.Fatalf("expected rune count in result, got: %s", text)
+	}
+}
+
 func TestDownloadMediaNoMessage(t *testing.T) {
 	a := testApp(t)
 

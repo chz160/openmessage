@@ -336,6 +336,9 @@ func TestSetTranscript(t *testing.T) {
 	if got["message_id"] != "audio-1" {
 		t.Fatalf("message_id = %#v, want audio-1", got["message_id"])
 	}
+	if got["transcript_length"] != float64(11) {
+		t.Fatalf("transcript_length = %#v, want 11", got["transcript_length"])
+	}
 
 	msg, err := ts.store.GetMessageByID("audio-1")
 	if err != nil {
@@ -434,6 +437,47 @@ func TestSetTranscriptPreservesModelWhenOmitted(t *testing.T) {
 	}
 	if msg.TranscriptModel != "whisper-large-v3" {
 		t.Fatalf("model = %q, want whisper-large-v3", msg.TranscriptModel)
+	}
+}
+
+func TestSetTranscriptCountsCharacters(t *testing.T) {
+	ts := newTestServer(t)
+
+	if err := ts.store.UpsertConversation(&db.Conversation{
+		ConversationID: "c1",
+		Name:           "Alice",
+		LastMessageTS:  100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.store.UpsertMessage(&db.Message{
+		MessageID:      "audio-1",
+		ConversationID: "c1",
+		Body:           "[Voice note]",
+		MediaID:        "media-1",
+		MimeType:       "audio/ogg",
+		TimestampMS:    100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Post(ts.server.URL+"/api/transcript", "application/json", strings.NewReader(`{"message_id":"audio-1","transcript":"hé🙂"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("got status %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got["transcript_length"] != float64(3) {
+		t.Fatalf("transcript_length = %#v, want 3", got["transcript_length"])
 	}
 }
 

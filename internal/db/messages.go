@@ -532,11 +532,18 @@ func (s *Store) SetMessageTranscript(messageID, transcript string, model *string
 	if model != nil {
 		modelToSave = *model
 	}
+	if transcript == "" {
+		if msg.Transcript == "" && msg.TranscribedAtMS == 0 && msg.TranscriptModel == "" {
+			return nil
+		}
+		nowMS = 0
+		modelToSave = ""
+	} else if msg.Transcript == transcript && msg.TranscriptModel == modelToSave && msg.TranscribedAtMS != 0 {
+		return nil
+	}
 	needsTimestampUpdate := msg.Transcript != transcript || msg.TranscriptModel != modelToSave || msg.TranscribedAtMS == 0
 	switch {
 	case transcript == "":
-		nowMS = 0
-		modelToSave = ""
 	case needsTimestampUpdate:
 		nowMS = time.Now().UnixMilli()
 		if nowMS <= msg.TranscribedAtMS {
