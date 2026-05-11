@@ -36,10 +36,20 @@ func setMessageTranscriptHandler(a *app.App) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := req.GetArguments()
 		messageID := strArg(args, "message_id")
-		transcript := strArg(args, "transcript")
+		rawTranscript, ok := args["transcript"]
+		if !ok {
+			return errorResult("set_message_transcript: transcript is required"), nil
+		}
+		transcript, ok := rawTranscript.(string)
+		if !ok {
+			return errorResult("set_message_transcript: transcript must be a string"), nil
+		}
 		var model *string
 		if _, ok := args["model"]; ok {
-			modelValue := strArg(args, "model")
+			modelValue, ok := args["model"].(string)
+			if !ok {
+				return errorResult("set_message_transcript: model must be a string"), nil
+			}
 			model = &modelValue
 		}
 		if messageID == "" {

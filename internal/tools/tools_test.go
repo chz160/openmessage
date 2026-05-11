@@ -1031,6 +1031,78 @@ func TestSetMessageTranscriptReportsCharacterCount(t *testing.T) {
 	}
 }
 
+func TestSetMessageTranscriptRequiresTranscriptArgument(t *testing.T) {
+	a := testApp(t)
+	if err := a.Store.UpsertMessage(&db.Message{
+		MessageID:      "audio-1",
+		ConversationID: "c1",
+		MediaID:        "media-1",
+		MimeType:       "audio/ogg",
+		TimestampMS:    time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert message: %v", err)
+	}
+	initialModel := "whisper"
+	if err := a.Store.SetMessageTranscript("audio-1", "keep me", &initialModel); err != nil {
+		t.Fatalf("seed transcript: %v", err)
+	}
+
+	handler := setMessageTranscriptHandler(a)
+
+	t.Run("missing transcript", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"message_id": "audio-1",
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatalf("expected tool error for missing transcript")
+		}
+		text := result.Content[0].(mcp.TextContent).Text
+		if !strings.Contains(text, "transcript is required") {
+			t.Fatalf("expected missing transcript error, got: %s", text)
+		}
+		msg, err := a.Store.GetMessageByID("audio-1")
+		if err != nil {
+			t.Fatalf("reload message: %v", err)
+		}
+		if msg.Transcript != "keep me" || msg.TranscriptModel != "whisper" {
+			t.Fatalf("transcript changed on missing arg: %#v", msg)
+		}
+	})
+
+	t.Run("invalid transcript type", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"message_id": "audio-1",
+			"transcript": 123,
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatalf("expected tool error for invalid transcript type")
+		}
+		text := result.Content[0].(mcp.TextContent).Text
+		if !strings.Contains(text, "transcript must be a string") {
+			t.Fatalf("expected transcript type error, got: %s", text)
+		}
+		msg, err := a.Store.GetMessageByID("audio-1")
+		if err != nil {
+			t.Fatalf("reload message: %v", err)
+		}
+		if msg.Transcript != "keep me" || msg.TranscriptModel != "whisper" {
+			t.Fatalf("transcript changed on invalid arg: %#v", msg)
+		}
+	})
+}
+
 func TestDownloadMediaNoMessage(t *testing.T) {
 	a := testApp(t)
 
